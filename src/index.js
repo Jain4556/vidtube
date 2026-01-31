@@ -1,1 +1,8 @@
-console.log("hello from sunil this is a web-dev course ");
+import { app } from "./app.js";
+
+
+const PORT = 3000
+app.listen(3000, () => {
+    console.log(`server is running on  port ${PORT}`);
+
+})
