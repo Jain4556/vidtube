@@ -5,17 +5,18 @@ import { User } from "../models/user.models.js"
 
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import jwt from "jsonwebtoken"
 
 const generateAccessAndRefreshToken = async (userId) => {
-    const user  = await User.findById(userId)
+    const user = await User.findById(userId)
 
 
-   const refreshToken =  user.generateRefreshToken()
-   const accessToken =  user.generateAccessToken()
+    const refreshToken = user.generateRefreshToken()
+    const accessToken = user.generateAccessToken()
 
-   user.refreshToken = refreshToken
-   await user.save({validateBeforeSave: false})
-   return {accessToken, refreshToken    }
+    user.refreshToken = refreshToken
+    await user.save({ validateBeforeSave: false })
+    return { accessToken, refreshToken }
 }
 
 
@@ -78,86 +79,145 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
 
- try {
-       const user = await User.create({
-           fullname,
-           avatar: avatar.url,
-           coverImage: coverImage?.url || "",
-           email,
-           password,
-           username: username.tolowercase()
-       })
-   
-       const createdUser = await User.findById(user._id).select(
-           "-password -refreshToken"
-       )
-   
-       if (!createdUser) {
-           throw new ApiError(500, "Something went wrong while registering the user")
-       }
-       return res
-           .status(201)
-           .json(new ApiResponse(200, createdUser, "User registered successfully"))
- } catch (error) {
-    console.log("user creation failed");
+    try {
+        const user = await User.create({
+            fullname,
+            avatar: avatar.url,
+            coverImage: coverImage?.url || "",
+            email,
+            password,
+            username: username.tolowercase()
+        })
 
-    if (coverImage) {
-        await deleteFromCloudinary(avatar.public._id)
+        const createdUser = await User.findById(user._id).select(
+            "-password -refreshToken"
+        )
+
+        if (!createdUser) {
+            throw new ApiError(500, "Something went wrong while registering the user")
+        }
+        return res
+            .status(201)
+            .json(new ApiResponse(200, createdUser, "User registered successfully"))
+    } catch (error) {
+        console.log("user creation failed");
+
+        if (coverImage) {
+            await deleteFromCloudinary(avatar.public._id)
+        }
+
+        throw new ApiError(500, "Something went wrong while registering the user and images were deleted")
+
     }
-
-     throw new ApiError(500, "Something went wrong while registering the user and images were deleted")
-    
- }
 })
 
 const loginUser = asyncHandler(async (req, res) => {
 
-    const {email, username, password} = req.body
+    const { email, username, password } = req.body
 
     // validation 
     if (!email) {
         throw new ApiError(400, "email is required")
     }
 
-     const user = await User.findOne({
+    const user = await User.findOne({
         $or: [{ username }, { email }]
     })
 
-    if(!user) {
+    if (!user) {
         throw new ApiError(404, "user not found")
     }
 
 
-  const isPasswordValid =   await user.isPasswordCorrect(password)
+    const isPasswordValid = await user.isPasswordCorrect(password)
 
-  if (!isPasswordValid) {
-     throw new ApiError(401, "invalid credentials")
-  }
+    if (!isPasswordValid) {
+        throw new ApiError(401, "invalid credentials")
+    }
 
 
-  const {accessToken, refreshToken} = await 
-  generateAccessAndRefreshToken(user._id)
+    const { accessToken, refreshToken } = await
+        generateAccessAndRefreshToken(user._id)
 
-  const loggedInUser = await user.findById(user._id).select("-password -refreshToken")
+    const loggedInUser = await user.findById(user._id).select("-password -refreshToken")
 
-  const options = {
-    httpOnly: true, 
-    secure: process.env.NODE_ENV === "production", 
+    const options = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
 
-  }
+    }
 
     return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(new Response(
-        200,
-        {user: loggedInUser, accessToken, refreshToken}, 
-        "User logged In successfully"
-    ))
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(new Response(
+            200,
+            { user: loggedInUser, accessToken, refreshToken },
+            "User logged In successfully"
+        ))
 })
 
 
-export { registerUser, 
-    loginUser
- }
+const logoutUser = asyncHandler (async (req, res) => {
+    await User.findByIdAndUpdate(
+        // after middleware video
+    )
+})
+
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if (!incomingRefreshToken) {
+        throw new ApiError(401, "refresh token is required")
+    }
+
+    try {
+        const decodedToken = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+
+        )
+
+        const user = await User.findById(decodedToken?._id)
+
+        if (!user) {
+            throw new ApiError(401, "user not found")
+        }
+
+        if (incomingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "invalid refresh token")
+        }
+
+        const options = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+        }
+
+        const { accessToken, refreshToken: newRefreshToken } =
+            await generateAccessAndRefreshToken(user._id)
+
+
+
+        return res
+
+            .status(200)
+            .cookie("accessToken", accessToken, options)
+            .cookie("refreshToken", refreshToken, options)
+            .json(new Response(
+                200,
+                { user: loggedInUser, accessToken, refreshToken },
+                "User logged In successfully"
+            ))
+    }
+    catch (error) {
+        throw new ApiError(500, "something went wrong while refreshing new token")
+    }
+})
+
+export {
+    registerUser,
+    loginUser,
+    refreshAccessToken
+}
