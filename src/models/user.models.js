@@ -21,8 +21,8 @@ const userSchema = new Schema(
             lowercase: true,
             trim: true
         },
-        fullName: {
-            type: String,
+        fullname: {
+            type: String, 
             required: true,
             trim: true,
             index: true
@@ -36,7 +36,7 @@ const userSchema = new Schema(
         },
         watchHistory: [
             {
-                type: Schema.type.objectId,
+                type: Schema.Types.ObjectId,
                 ref: "Video"
             }
         ],
@@ -54,7 +54,8 @@ const userSchema = new Schema(
 )
 
 userSchema.pre("save", async function (next) {
-    if (!this.modified("password")) return next()
+
+    if (!this.isModified("password")) return next()
 
     this.password = bcrypt.hash(this.password, 10)
 
@@ -64,7 +65,7 @@ userSchema.pre("save", async function (next) {
 
 userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password)
-    
+
 }
 
 
@@ -86,7 +87,7 @@ userSchema.methods.generateRefreshToken = function () {
     // short lived session 
     return jwt.sign({
         _id: this._id,
-       
+
     },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
